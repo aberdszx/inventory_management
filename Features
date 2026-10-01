@@ -1,0 +1,14 @@
+Columns
+    * id
+    * item
+    * count
+    * warehouse
+    * supplier
+
+Inventory of sc warehouse.
+
+1. Must have admin and user level user.
+    - admin can add item and its description
+    - user can just decrease and increase the stock
+
+2.
