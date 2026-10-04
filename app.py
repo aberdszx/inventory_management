@@ -52,16 +52,40 @@ def update_quantity():
         return
     # MORE THAN ONE ITEM MATCHED
     elif len(items) > 1:
+        result_ids = []
         for item in items:
+            result_ids.append(item[0])
             print(item)
 
-        id = input("Enter item id instead: ")
-        ID = int(id)
+        while True:
+            try:
+                id = int(input("Enter item id instead: "))
+                ID = id
+                break
+            except ValueError:
+                print("Invalid ID")
+
+        while True:
+            if ID not in result_ids:
+                print("ID not in the selection")
+                ID = int(input("Enter item id instead: "))
+            else:
+                break
+
+
     # ONE ITEM MATCHED
     else:
         ID = items[0][0]
 
-    new_quantity = input("Enter new quantity: ")
+    while True:
+        try:
+            new_quantity = int(input("Enter new quantity: "))
+            if new_quantity < 0:
+                print("Quantity cannot be negative!")
+                continue
+            break
+        except ValueError:
+            print("Invalid quantity")
     # UPDATING THE QUANTITY
     with sqlite3.connect('ims.db') as conn:
         cursor = conn.cursor()
@@ -77,5 +101,3 @@ def update_quantity():
             print("item_name " + "    new quantity \n" + item[1] + "        " + str(item[5]))
 
 
-
-update_quantity()
