@@ -1,4 +1,5 @@
 import sqlite3
+import time
 
 
 def add_item():
@@ -36,23 +37,45 @@ def search_inventory(search_key):
         return items
 
 
+# UPDATING QUANTITY. WHEN MORE THAN 1 RESULT RETURNED IT WILL ASK THE USER TO ENTER THE ITEM ID INSTEAD
 
 def update_quantity():
-    statement = 'UPDATE stocks SET quantity = ? WHERE item_name = ? OR sku = ?;'
-    print("Update quantity")
-    item_name = input("Enter item name: ")
-    if not search_inventory(item_name):
+    update_statement = 'UPDATE stocks SET quantity = ? WHERE id = ?;'
+    show_statement = 'SELECT * FROM stocks WHERE id = ?;'
+
+    search_key = input("Enter item name or sku: ")
+    items = search_inventory(search_key)
+
+    # NO ITEM MATCHED
+    if not items:
         print("No items found")
         return
+    # MORE THAN ONE ITEM MATCHED
+    elif len(items) > 1:
+        for item in items:
+            print(item)
+
+        id = input("Enter item id instead: ")
+        ID = int(id)
+    # ONE ITEM MATCHED
+    else:
+        ID = items[0][0]
+
     new_quantity = input("Enter new quantity: ")
+    # UPDATING THE QUANTITY
     with sqlite3.connect('ims.db') as conn:
         cursor = conn.cursor()
-        cursor.execute(statement, (new_quantity,item_name,item_name) )
+        cursor.execute(update_statement, (new_quantity, ID))
         conn.commit()
+
+    # SHOWING THE UPDATED QUANTITY
     with sqlite3.connect('ims.db') as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM stocks WHERE item_name = ? OR sku = ?;', (item_name, item_name, ) )
+        cursor.execute(show_statement, (ID, ))
         updated = cursor.fetchall()
         for item in updated:
             print("item_name " + "    new quantity \n" + item[1] + "        " + str(item[5]))
 
+
+
+update_quantity()
