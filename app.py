@@ -239,8 +239,10 @@ def restock_item():
 
     restock_statement = 'UPDATE stocks SET quantity = quantity + ? WHERE id = ?;'
     updated_quantity = 'SELECT * FROM stocks WHERE id = ?;'
+    restock_log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
     db_commit(restock_statement, (added_quantity, ID))
     updated = show_items(updated_quantity, (ID,))
+    db_commit(restock_log, (ID, "RESTOCK", added_quantity))
     print("Updated quantity of " + updated[0][1] + " is " + str(updated[0][5]))
 
 
@@ -276,6 +278,9 @@ def sell_item():
         print("Current item count of " + items[0][1] + " is " + str(items[0][5]))
         ID = items[0][0]
 
+    show_statement = 'SELECT * FROM stocks WHERE id = ?'
+    selected_item = show_items(show_statement, (ID,))
+    current_item_quantity = selected_item[0][5]
 
     while True:
         try:
@@ -283,7 +288,7 @@ def sell_item():
             if sold_quantity < 0:
                 print("Quantity cannot be negative!")
                 continue
-            elif (items[0][5] - sold_quantity) < 0:
+            elif current_item_quantity - sold_quantity < 0:
                 print("Not enough items to sell")
                 continue
             break
@@ -292,8 +297,10 @@ def sell_item():
 
     sell_statement = 'UPDATE stocks SET quantity = quantity - ? WHERE id = ?;'
     updated_quantity = 'SELECT * FROM stocks WHERE id = ?;'
+    restock_log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
     db_commit(sell_statement, (sold_quantity, ID))
     updated = show_items(updated_quantity, (ID,))
+    db_commit(restock_log, (ID, "SELL", sold_quantity))
     print("Updated quantity of " + updated[0][1] + " is " + str(updated[0][5]))
 
 
@@ -306,7 +313,8 @@ def main():
         print("4. View inventory")
         print("5. Search an item")
         print("6. Restock item")
-        print("7. Exit")
+        print("7. Sell item")
+        print("8. Exit")
 
         try:
             operation = int(input("Enter your choice: "))
@@ -334,6 +342,9 @@ def main():
                 restock_item()
 
             elif operation == 7:
+                sell_item()
+
+            elif operation == 8:
                 print("Exiting...")
                 break
 
@@ -343,5 +354,6 @@ def main():
             print("INVALID INPUT!")
 
 
-sell_item()
-#restock_item()
+#sell_item()
+restock_item()
+#view_inventory()
