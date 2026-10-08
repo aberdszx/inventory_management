@@ -1,4 +1,5 @@
 import sqlite3
+from tabulate import tabulate
 
 
 def db_commit(statement, parameters):
@@ -7,6 +8,29 @@ def db_commit(statement, parameters):
         cursor.execute(statement, parameters)
         conn.commit()
 
+
+def db_transaction(statement, log, confirmation,
+                   statement_parameters, log_parameters, confirmation_parameters):
+
+    with sqlite3.connect('ims.db') as conn:
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute('BEGIN TRANSACTION;')
+
+            cursor.execute(statement, statement_parameters)
+            cursor.execute(log, log_parameters)
+            cursor.execute(confirmation, confirmation_parameters)
+
+            updated = cursor.fetchall()
+
+            conn.commit()
+
+            return updated
+
+        except Exception as e:
+            conn.rollback()
+            print(f"Transaction failed: {e}")
 
 def show_items(statement, parameters):
     with sqlite3.connect('ims.db') as conn:
@@ -239,10 +263,8 @@ def restock_item():
 
     restock_statement = 'UPDATE stocks SET quantity = quantity + ? WHERE id = ?;'
     updated_quantity = 'SELECT * FROM stocks WHERE id = ?;'
-    restock_log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
-    db_commit(restock_statement, (added_quantity, ID))
-    updated = show_items(updated_quantity, (ID,))
-    db_commit(restock_log, (ID, "RESTOCK", added_quantity))
+    transaction_log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
+    updated = db_transaction(restock_statement, transaction_log, updated_quantity, (added_quantity, ID), (ID, "RESTOCK", added_quantity), (ID,))
     print("Updated quantity of " + updated[0][1] + " is " + str(updated[0][5]))
 
 
@@ -297,12 +319,25 @@ def sell_item():
 
     sell_statement = 'UPDATE stocks SET quantity = quantity - ? WHERE id = ?;'
     updated_quantity = 'SELECT * FROM stocks WHERE id = ?;'
-    restock_log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
-    db_commit(sell_statement, (sold_quantity, ID))
-    updated = show_items(updated_quantity, (ID,))
-    db_commit(restock_log, (ID, "SELL", sold_quantity))
+    transaction_log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
+    updated = db_transaction(sell_statement, transaction_log, updated_quantity, (sold_quantity, ID), (ID, "SELL", sold_quantity), (ID,))
     print("Updated quantity of " + updated[0][1] + " is " + str(updated[0][5]))
 
+
+def view_transactions():
+    statement = 'SELECT t.id, s.item_name, t.transaction_type, t.quantity, t.created_at FROM stocks s INNER JOIN transactions t ON s.id = t.item_id ORDER BY t.id;'
+    with sqlite3.connect('ims.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute(statement)
+        transactions = cursor.fetchall()
+
+    print("-----TRANSACTIONS-----")
+    table = []
+    headers = ["ID", "Item Name", "Transaction Type", "Quantity", "Created At"]
+    for transaction in transactions:
+        for i in transactions:
+            table.append(i)
+    print(tabulate(table, headers=headers, tablefmt="grid"))
 
 def main():
     while True:
@@ -314,7 +349,8 @@ def main():
         print("5. Search an item")
         print("6. Restock item")
         print("7. Sell item")
-        print("8. Exit")
+        print("8. View transactions")
+        print("9. Exit")
 
         try:
             operation = int(input("Enter your choice: "))
@@ -345,6 +381,9 @@ def main():
                 sell_item()
 
             elif operation == 8:
+                view_transactions()
+
+            elif operation == 9:
                 print("Exiting...")
                 break
 
@@ -354,6 +393,6 @@ def main():
             print("INVALID INPUT!")
 
 
-#sell_item()
-restock_item()
-#view_inventory()
+
+
+main()
