@@ -96,13 +96,13 @@ def add_item():
 
 def view_inventory():
     print("-----IVENTORY-----")
-    statement = 'SELECT * FROM stocks;'
+    statement = 'SELECT * FROM stocks WHERE category != "INACTIVE" ;'
     with sqlite3.connect('ims.db') as conn:
         cursor = conn.cursor()
         cursor.execute(statement)
         items = cursor.fetchall()
-    for item in items:
-        print(item)
+    table = tabulate(items, headers=["ID", "Item Name", "SKU", "Category", "Warehouse", "Quantity"], tablefmt="pipe")
+    print(table)
 
 
 def search_inventory(search_key):
@@ -118,6 +118,7 @@ def update_quantity():
     print("-----UPDATE QUANTITY-----")
     update_statement = 'UPDATE stocks SET quantity = ? WHERE id = ?;'
     show_statement = 'SELECT * FROM stocks WHERE id = ?;'
+    log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
 
     search_key = input("Enter item name or sku: ")
     items = search_inventory(search_key)
@@ -131,7 +132,8 @@ def update_quantity():
         result_ids = []
         for item in items:
             result_ids.append(item[0])
-            print(item)
+        table = tabulate(items, headers=["ID", "Item Name", "SKU", "Category", "Warehouse", "Quantity"], tablefmt="pipe")
+        print(table)
 
         while True:
             try:
@@ -161,18 +163,24 @@ def update_quantity():
             break
         except ValueError:
             print("Invalid quantity")
-    # UPDATING THE QUANTITY
-    db_commit(update_statement, (new_quantity, ID))
-    # SHOWING THE UPDATED QUANTITY
-    updated = show_items(show_statement, (ID,))
+    current_count = items[0][5]
+    difference = new_quantity - current_count
+    print(difference)
+    if difference == 0:
+        print("No change in quantity")
+        return
+
+    updated = db_transaction(update_statement,log, show_statement, (new_quantity, ID), (ID, "UPDATE", difference), (ID,))
     for item in updated:
-        print("\n-ITEM NAME " + "                   NEW COUNT \n" + item[1] + "                   " + str(item[5]))
+        print("\n-ITEM NAME " + "                   NEW COUNT \n" + item[1] + "                   " + str(item[5]))     
+
 
 
 def delete_item():
     print("-----DELETE AN ITEM-------")
-    delete_statement = 'DELETE FROM stocks WHERE id = ?;'
+    delete_statement = 'UPDATE stocks SET category = "INACTIVE" WHERE id = ?;'
     show_statement = 'SELECT * FROM stocks WHERE id = ?;'
+    log = 'INSERT INTO transactions (item_id, transaction_type, quantity, created_at) VALUES (?, ?, ?, datetime("now"));'
 
     item_name = input("Enter item name or sku: ")
     items = search_inventory(item_name)
@@ -184,7 +192,8 @@ def delete_item():
         result_ids = []
         for item in items:
             result_ids.append(item[0])
-            print(item)
+        table = tabulate(items, headers=["ID", "Item Name", "SKU", "Category", "Warehouse", "Quantity"], tablefmt="pipe")
+        print(table)
 
         while True:
             try:
@@ -208,7 +217,7 @@ def delete_item():
         confirmation = input("Are you sure you want to delete " + item[0][1] + "? (y/n): ")
         confirmation = confirmation.upper()
         if confirmation == "Y":
-            db_commit(delete_statement, (ID, ))
+            db_transaction(log, show_statement, delete_statement, (ID, "DELETED", item[0][5]), (ID,), (ID,))
             print("Item " + item[0][1] + " has been deleted")
             return
         elif confirmation == "N":
@@ -233,7 +242,8 @@ def restock_item():
         result_ids = []
         for item in items:
             result_ids.append(item[0])
-            print(item)
+        table = tabulate(items, headers=["ID", "Item Name", "SKU", "Category", "Warehouse", "Quantity"], tablefmt="pipe")
+        print(table)
 
         while True:
             try:
@@ -281,9 +291,10 @@ def sell_item():
     elif len(items) > 1:
         print("Multiple items found")
         result_ids = []
+        table = tabulate(items, headers=["ID", "Item Name", "SKU", "Category", "Warehouse", "Quantity"], tablefmt="pipe")
         for item in items:
             result_ids.append(item[0])
-            print(item)
+        print(table)
 
         while True:
             try:
@@ -325,20 +336,83 @@ def sell_item():
 
 
 def view_transactions():
-    statement = 'SELECT t.id, s.item_name, t.transaction_type, t.quantity, t.created_at FROM stocks s INNER JOIN transactions t ON s.id = t.item_id ORDER BY t.id;'
+    statement = 'SELECT t.id, s.item_name, t.transaction_type, t.quantity, t.created_at ' \
+    'FROM stocks s ' \
+    'INNER JOIN transactions t ON s.id = t.item_id ' \
+    'ORDER BY t.id DESC;'
     with sqlite3.connect('ims.db') as conn:
         cursor = conn.cursor()
         cursor.execute(statement)
         transactions = cursor.fetchall()
 
-    print("-----TRANSACTIONS-----")
-    table = []
-    headers = ["ID", "Item Name", "Transaction Type", "Quantity", "Created At"]
-    for transaction in transactions:
-        for i in transactions:
-            table.append(i)
-    print(tabulate(table, headers=headers, tablefmt="grid"))
 
+    updated_transactions = []
+    for transaction in transactions:
+        quantity = transaction[3]
+        quantity = int(quantity)
+        print(quantity)
+        print(type(quantity))
+        if transaction[2] == "UPDATE":
+            if quantity < 0:
+                quantity = "+" + str(quantity)
+                updated_transactions.append((transaction[0], transaction[1], transaction[2], quantity, transaction[4])) 
+    print("-----------------------------------TRANSACTIONS--------------------------------")
+    table = tabulate(transactions, headers=["ID", "Item Name", "Transaction Type", "Quantity", "Created At"], tablefmt="pipe")
+    print(table)
+
+
+def view_item_transactions():
+    print("-----VIEW ITEM TRANSACTIONS-----")
+    search_key = input("Enter item name or sku: ")
+    items = search_inventory(search_key)
+    # NO ITEM MATCHED
+    if not items:
+        print("No items found")
+        return
+    # MORE THAN ONE ITEM MATCHED
+    elif len(items) > 1:
+        print("Multiple items found")
+        result_ids = []
+        for item in items:
+            result_ids.append(item[0])
+        table = tabulate(items, headers=["ID", "Item Name", "SKU", "Category", "Warehouse", "Quantity"], tablefmt="pipe")
+        print(table)
+
+        while True:
+            try:
+                ID = int(input("Enter item id instead: "))
+                if ID not in result_ids:
+                    print("ID not in the selection")
+                    continue
+                break
+            except ValueError:
+                print("Invalid ID")
+
+    # ONE ITEM MATCHED
+    else:
+        print("Current item count of " + items[0][1] + " is " + str(items[0][5]))
+        ID = items[0][0]
+
+    statement = 'SELECT t.id, s.item_name, t.transaction_type, t.quantity, t.created_at ' \
+    'FROM stocks s ' \
+    'INNER JOIN transactions t ON s.id = t.item_id ' \
+    'WHERE s.id = ? ' \
+    'ORDER BY t.id DESC;'
+    with sqlite3.connect('ims.db') as conn:
+        cursor = conn.cursor()
+        cursor.execute(statement, (ID,))
+        transactions = cursor.fetchall()
+
+    if not transactions:
+        print("No transactions found for this item")
+        return
+    else:
+        print("-----------------------------------TRANSACTIONS--------------------------------")
+        table = tabulate(transactions, headers=["ID", "Item Name", "Transaction Type", "Quantity", "Created At"], tablefmt="pipe")
+        print(table)
+
+
+    
 def main():
     while True:
         print("-----Welcome to Stock Inventory System-----")
@@ -350,7 +424,8 @@ def main():
         print("6. Restock item")
         print("7. Sell item")
         print("8. View transactions")
-        print("9. Exit")
+        print("9. View item transactions")
+        print("10. Exit")
 
         try:
             operation = int(input("Enter your choice: "))
@@ -384,6 +459,9 @@ def main():
                 view_transactions()
 
             elif operation == 9:
+                view_item_transactions()
+
+            elif operation == 10:
                 print("Exiting...")
                 break
 
@@ -394,5 +472,8 @@ def main():
 
 
 
-
-main()
+# sell_item()
+# restock_item()
+view_transactions()
+#view_inventory()
+#update_quantity()
